@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 type Message = {
   role: "user" | "ai";
@@ -14,27 +14,37 @@ export default function AIBox() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // auto scroll to latest message
+  const suggestions = [
+    "Generate proposal",
+    "Improve my pitch",
+    "Summarize client brief",
+  ];
+
+  // auto scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleAsk = async () => {
-    if (!input.trim()) return;
+  const handleAsk = useCallback(async (customPrompt?: string) => {
+    const promptToSend = customPrompt || input;
+
+    if (!promptToSend.trim()) return;
 
     const userMessage: Message = {
       role: "user",
-      content: input,
+      content: promptToSend,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // ✅ Add user message (with limit)
+    setMessages((prev) => [...prev.slice(-11), userMessage]);
+
     setInput("");
     setLoading(true);
 
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
-        body: JSON.stringify({ prompt: input }),
+        body: JSON.stringify({ prompt: promptToSend }),
       });
 
       const data = await res.json();
@@ -44,17 +54,18 @@ export default function AIBox() {
         content: data.result,
       };
 
-      setMessages((prev) => [...prev, aiMessage]);
+      // ✅ Add AI response (with limit)
+      setMessages((prev) => [...prev.slice(-11), aiMessage]);
 
     } catch (err) {
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(-11),
         { role: "ai", content: "⚠️ Something went wrong." },
       ]);
     }
 
     setLoading(false);
-  };
+  }, [input]);
 
   return (
     <div className="nova-card p-6 flex flex-col h-[500px]">
@@ -63,8 +74,39 @@ export default function AIBox() {
       <div className="flex-1 overflow-y-auto space-y-4 pr-2 nova-scrollbar">
 
         {messages.length === 0 && (
-          <div className="text-sm text-gray-500">
-            Start a conversation with NOVA AI...
+          <div className="space-y-4">
+
+            <div className="text-sm text-gray-500">
+              NOVA helps you write, think, and execute faster.
+            </div>
+
+            {/* 💡 SUGGESTIONS */}
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((text, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    if (loading) return;
+                    setInput(text);
+                    setTimeout(() => handleAsk(text), 100);
+                  }}
+                  className="
+                    px-3 py-1.5
+                    text-xs
+                    rounded-full
+                    bg-white/5
+                    border border-white/10
+                    text-gray-300
+                    hover:bg-white/10
+                    hover:scale-[1.03]
+                    transition
+                  "
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+
           </div>
         )}
 
@@ -94,7 +136,6 @@ export default function AIBox() {
           </div>
         ))}
 
-        {/* loading state */}
         {loading && (
           <div className="text-sm text-gray-400 animate-pulse">
             NOVA is thinking...
@@ -118,18 +159,20 @@ export default function AIBox() {
         />
 
         <button
-          onClick={handleAsk}
+          onClick={() => handleAsk()}
           disabled={loading}
           className="
             nova-btn-primary
             px-5 py-3
             rounded-xl
             text-sm font-medium
+            active:scale-95
             disabled:opacity-50
           "
         >
-          {loading ? "..." : "Send"}
+          {loading ? "..." : messages.length === 0 ? "Generate" : "Send"}
         </button>
+
       </div>
 
     </div>
